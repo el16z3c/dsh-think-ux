@@ -1,0 +1,174 @@
+# local-dsh-think-ux
+
+DOM-layer client plugin that replaces the two first-generation bundle patches
+(think-expand + autoscroll gesture guard) with a proper DSH client plugin.
+It is NOT upgrade-proof: it relies on stable DOM attributes, a click-to-toggle
+row, and the bundle's plain `scrollTop` write path (see Residual risks). Its
+guarantee is a graceful, documented degradation — not immunity.
+
+## Behavior
+
+1. **Think rows expand while reasoning streams.** Any `[data-variant="think"]`
+   row with `data-state="running"` is auto-expanded via a synthetic click on
+   its `[data-disclosure-row]` element (React keeps owning the state). When the
+   row settles (`data-state="ok"`) the plugin auto-collapses it — unless the
+   reader toggled that row themselves; a trusted click on the row hands it over
+   permanently (plugin never touches it again for the row's lifetime).
+   History rows and rows under `[data-turn-process-inline][hidden]` are left
+   alone.
+
+2. **Reader scroll intent via a `scrollTop` write trap.** Any reader-initiated
+   upward movement (wheel up, touch finger-down drag, PageUp/Home/ArrowUp, or
+   any upward `scrollTop` drift) arms a 700 ms intent window. The plugin then
+   installs a `defineProperty` trap on the scroller's `scrollTop`.
+
+   The discriminator is structural, not heuristic: the bundle's follow re-pin
+   is a plain JS assignment (`el.scrollTop = el.scrollHeight` in
+   `toBottom`/`followRef`), while every reader input method — wheel, touch,
+   scrollbar thumb, track click — scrolls natively inside the browser and never
+   passes through the JS property setter. So **the reader's return can never be
+   misclassified** (no event-shape heuristics, no thresholds to tune):
+
+   - a write whose target is at or beyond floor-minus-25 while the reader sits
+     more than 25 px above the floor (inside the window) is a re-pin (the
+     bundle writes `el.scrollHeight`, which overshoots and is clamped to the
+     floor): it is let land (the bundle's own bookkeeping stays consistent)
+     and the reader's position is restored in the same tick — the yank never
+     paints, and the resulting scroll event makes the bundle's 500 ms sample
+     heal `atBottomRef=false`, so it stops re-pinning on its own;
+   - a DOWNWARD arrival within 45 px of the floor (the re-follow zone) ends the
+     intent and actively bottoms out: the pristine bundle only re-engages its
+     follow at its own 25 px threshold, so a reader stopping in the 25–45 px
+     band would otherwise strand (intent off, follow dead). The ≤45 px
+     bottom-out nudge lands the bundle at 0 px, where its debounced sample
+     flips `atBottomRef` back to true and native follow resumes (typically
+     within the 500 ms sample debounce plus the next content chunk). A reader
+     who PASSES through the band on the way up is armed, not nudged; a reader
+     who stops there is left there.
+   - exceptions (re-pin-shaped writes LET THROUGH, intent ends): a NEW
+     reader-initiated element appeared since arming — a durable user flow row
+     (`data-chat-flow-kind="user"`), a pending-steering bubble
+     (`data-pending-steering`), or a submission echo
+     (`data-submission-echo`) — i.e. the bundle's "show me my message" jump;
+     or a trusted click on the scroller's back-to-bottom button (the only
+     `<button>` inside the conversation scroller and outside the
+     `[data-chat-flow]` column), queued by a capture-phase click listener so
+     the button's own `toBottom` write is never reverted even inside the
+     intent window.
+
+   The 700 ms window covers the bundle's 500 ms scroll-sample debounce
+   (`SCROLL_SAMPLE_INTERVAL_MS = 500`), the only window in which the bundle can
+   yank.
+
+## Deployment (quickstart in a new environment)
+
+This repo IS the deployable. No build step (plain JS):
+
+```
+package.json   name local-dsh-think-ux, dsh.client.platform=web, inject: []
+lib/index.js   host half — marker only, apply() no-op
+lib/client.js  browser half — all behavior
+deploy.ps1     parameterized deployer (SHA-verified, prints profile snippet)
+```
+
+One command, from the repo root:
+
+```powershell
+pwsh -File deploy.ps1                      # derives root+version from $env:DSH_HOME
+pwsh -File deploy.ps1 -DshRoot 'C:\dsh' -Version '0.1.5-rc.2'  # explicit
+```
+
+It copies the plugin byte-for-byte into `<root>\plugins\dsh-think-ux\`
+(upgrade-surviving source of truth) and
+`<root>\versions\<ver>\plugins\dsh-think-ux\` (the copy the profile loads),
+verifies SHA256 parity, and prints the profile state. If the web profile
+`<root>\home\<ver>\profiles\web\cordis.patch.yml` lacks the insert row, add the
+snippet it prints:
+
+```yaml
+- insert:
+    - id: dsh-think-ux
+      name: file:///<root-as-file-uri>/versions/<ver>/plugins/dsh-think-ux/lib/index.js
+```
+
+Then refresh the GUI (the profile insert is picked up on reload; no other
+restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
+<newver>` and re-add the insert row for the new version dir (the top-level
+`plugins\` copy survives the upgrade untouched).
+
+## Constraints honored
+
+- No `@deepseek-ai/*` requires; `inject: []` (pure DOM, no bundle services).
+- No bare `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`/`fetch` —
+  those globals are withheld from dynamic client packages by the runner's
+  closure traps. Timed behavior uses `Date.now()` + `requestAnimationFrame` +
+  MutationObserver only.
+- `ctx.effect(callback, label)` is a context verb and needs no service
+  declaration; unload cascades the effect cleanup (observer, listeners, maps).
+- Selectors are stable attributes only (`data-conversation-scroll`,
+  `data-variant`, `data-state`, `data-expanded`, `data-disclosure-row`,
+  `[hidden]`) — never hashed CSS-module class names.
+
+## Residual risks (honest)
+
+- **Selector stability.** The behavior depends on the chat package keeping
+  `data-variant="think"` / `data-state` / `data-expanded` /
+  `data-disclosure-row`. These are documented component-attribute names, not
+  build hashes, but a future version could rename them. Failure mode is
+  graceful: the plugin simply stops doing anything (no errors, no breakage of
+  the host UI).
+- **Click-to-toggle assumption.** Expansion is driven by dispatching a click
+  because the collapsed body unmounts (no `keepContentWhenOpen`); if a future
+  build keeps content mounted and exposes a different toggle primitive, the
+  synthetic click may double-toggle. Guard: the plugin re-reads `data-expanded`
+  before every click and expects exactly the recorded result; an unexpected
+  external toggle marks the row as user-controlled and stops touching it.
+- **Row identity loss on remount.** Row bookkeeping is keyed by element
+  identity. If a row's element is re-created mid-run (parent swap), the new
+  element loses `userToggled` history: a user-opened row that comes back
+  already open is taken over as managed (no click needed) and auto-collapsed
+  on settle — the plugin's default policy, not the user's choice. In
+  0.1.5-rc.2 this is not reachable in normal operation: the bundle shares one
+  keyed renderer instance across streaming/settled/interrupted, the
+  in-page "container" change is a `hidden`-attribute toggle on the same
+  wrapper, and any true remount starts collapsed (local `useState(false)`),
+  which the plugin re-manages (re-expand while running, collapse on settle).
+  The takeover branch makes the loss degrade to "default policy" instead of
+  "stuck expanded".
+- **Write-path assumption.** The trap only sees JS property assignments
+  (`el.scrollTop = x`), which is how 0.1.5-rc.2 performs every programmatic
+  scroll (toBottom, followRef, land-on-row, saved-position restore). If a
+  future version switches to `el.scrollTo(...)` or `scrollIntoView` for the
+  follow, re-pins bypass the trap and the yank becomes visible again (the row
+  features are unaffected). Native reader scrolling is never affected either
+  way.
+- **Bottom-out nudge is a real (small) jump.** A downward arrival in the
+  25–45 px band visibly nudges the view to the true bottom (≤45 px). That is
+  the requested 45 px re-follow semantics — the bundle's own bookkeeping only
+  accepts ≤25 px — but a reader who stops exactly in the band is pulled the
+  last few pixels instead of being left there.
+- **Back-to-bottom button identification.** The button is recognized
+  structurally (the only `<button>` inside the conversation scroller, outside
+  the `[data-chat-flow]` column), not by a stable attribute. If a future
+  build puts another button in that spot, that button's jump would also be
+  let through while the intent window is open (harmless: it still lands the
+  reader at the bottom where they can be).
+- **Turn-rail jump near the floor.** A rail/anchor jump that lands the view
+  within 25 px of the bottom, made while the 700 ms intent window is open and
+  no new reader-initiated element appeared since arming, is indistinguishable
+  from a re-pin and gets reverted. Rare combination; jumping again works.
+- **Cosmetic flicker.** A reverted re-pin still runs the bundle's `toBottom`
+  side effects (`setAtBottom(true)`, active-turn update) before the restore, so
+  the "jump to bottom" affordance can flicker once per revert; the bundle's own
+  500 ms sample heals it.
+- **Re-pin revert window.** The 700 ms intent TTL covers the bundle's 500 ms
+  scroll-sample debounce (the only window in which the bundle can yank). A
+  re-pin arriving just after TTL expiry is not reverted (by design — the reader
+  may have stopped moving and follow should resume).
+- **Upgrade path.** The bundle is pristine (verified by SHA against
+  `state-registry.txt`); the plugin is the sole layer. On a DSH version
+  upgrade: the top-level `plugins\dsh-think-ux\` survives; recopy it into the
+  new `versions\<ver>\plugins\` dir and re-add the profile insert row pointing
+  at the new version-dir copy. If the new version's scroller no longer uses
+  plain `scrollTop` assignments, the scroll-intent half degrades to
+  bundle-default behavior (rows unaffected).
