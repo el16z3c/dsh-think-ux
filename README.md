@@ -16,6 +16,14 @@ guarantee is a graceful, documented degradation — not immunity.
    permanently (plugin never touches it again for the row's lifetime).
    History rows and rows under `[data-turn-process-inline][hidden]` are left
    alone.
+   While auto-expanded, the body is a **capped preview**: at most 8 lines
+   (line height taken from the bundle's own secondary-content token,
+   `calc(20px + var(--dsh-content-font-delta-secondary,0px))`), tail-pinned so
+   the newest streamed lines stay visible, with 24 px top/bottom fades — the
+   "live preview" look instead of a full-height expansion. The cap applies
+   only to plugin-managed rows: a reader toggle lifts it permanently for that
+   row (their expansion is full-height), and settle auto-collapse removes it
+   anyway.
 
 2. **Reader scroll intent via a `scrollTop` write trap.** Any reader-initiated
    upward movement (wheel up, touch finger-down drag, PageUp/Home/ArrowUp, or
@@ -135,6 +143,12 @@ restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
   which the plugin re-manages (re-expand while running, collapse on settle).
   The takeover branch makes the loss degrade to "default policy" instead of
   "stuck expanded".
+- **Capped preview line count.** The 8-line cap is computed from the bundle's
+  secondary-content line-height token; if a future version changes that token
+  the cap drifts by a fraction of a line (cosmetic only — the box stays
+  bounded either way). The fade mask is clamped (`min`/`max` stops) so short
+  bodies (fewer than ~2 lines) degrade to a symmetric fade instead of an
+  inverted gradient.
 - **Write-path assumption.** The trap only sees JS property assignments
   (`el.scrollTop = x`), which is how 0.1.5-rc.2 performs every programmatic
   scroll (toBottom, followRef, land-on-row, saved-position restore). If a
