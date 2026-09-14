@@ -18,11 +18,15 @@ guarantee is a graceful, documented degradation — not immunity.
    alone.
    While auto-expanded, the body is a **capped preview**: at most 24 lines
    (line height taken from the bundle's own secondary-content token,
-   `calc(20px + var(--dsh-content-font-delta-secondary,0px))`), tail-pinned so
-   the newest streamed lines stay visible, with 24 px top/bottom fades — the
-   "live preview" look instead of a full-height expansion. The cap applies
-   only to plugin-managed rows: a reader toggle lifts it permanently for that
-   row (their expansion is full-height), and settle auto-collapse removes it
+   `calc(20px + var(--dsh-content-font-delta-secondary,0px))`), with 24 px
+   top/bottom fades. It is a hidden-scrollbar scroll box that a single rAF
+   ticker **chases to the bottom** with exponential easing (70 ms time
+   constant, `CHASE_TAU_MS`), so appended streaming text glides up smoothly
+   instead of jumping in token chunks. A reader scroll up inside the preview
+   **pauses** that row's follow (terminal style); returning within 25 px of
+   the bottom resumes it. The cap applies only to plugin-managed rows: a
+   reader toggle lifts it permanently for that row (their expansion is
+   full-height and unscrollable), and settle auto-collapse removes it
    anyway.
 
 2. **Reader scroll intent via a `scrollTop` write trap.** Any reader-initiated
@@ -143,6 +147,15 @@ restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
   which the plugin re-manages (re-expand while running, collapse on settle).
   The takeover branch makes the loss degrade to "default policy" instead of
   "stuck expanded".
+- **Nested preview scroller.** The capped body is a hidden-scrollbar scroller
+  nested inside the main conversation scroller. A reader wheel/touch up
+  inside the preview bubbles to the main scroller's listeners and can arm the
+  700 ms intent window — the desired semantics (reading up anywhere pauses the
+  main-view yank), but the two scroll layers share the intent system. The
+  re-pin trap only watches the MAIN scroller's `scrollTop`; preview scrolling
+  never passes through it and is unaffected by intent state. If a future
+  bundle adds its own per-row scroll handling, the smooth follow degrades to
+  plain (janky) auto-scroll or none — the row features are unaffected.
 - **Capped preview line count.** The 24-line cap is computed from the bundle's
   secondary-content line-height token; if a future version changes that token
   the cap drifts by a fraction of a line (cosmetic only — the box stays
