@@ -31,8 +31,14 @@ guarantee is a graceful, documented degradation — not immunity.
 
 2. **Reader scroll intent via a `scrollTop` write trap.** Any reader-initiated
    upward movement (wheel up, touch finger-down drag, PageUp/Home/ArrowUp, or
-   any upward `scrollTop` drift) arms a 700 ms intent window. The plugin then
-   installs a `defineProperty` trap on the scroller's `scrollTop`.
+   any upward `scrollTop` drift) arms a 700 ms intent window. A passive clamp
+   is NOT reader intent: when content above the reader shrinks (a settled
+   think row collapsing), the browser clamps `scrollTop` down — it reads as
+   upward drift but ends at the floor, so it does not arm (otherwise every
+   turn boundary would freeze the smooth follow for 700 ms and fast-catch-up).
+   A real upward move leaves the at-bottom band within a few frames and arms
+   there. The plugin then installs a `defineProperty` trap on the scroller's
+   `scrollTop`.
 
    The discriminator is structural, not heuristic: the bundle's follow re-pin
    is a plain JS assignment (`el.scrollTop = el.scrollHeight` in
