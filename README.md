@@ -72,6 +72,33 @@ guarantee is a graceful, documented degradation — not immunity.
    (`SCROLL_SAMPLE_INTERVAL_MS = 500`), the only window in which the bundle can
    yank.
 
+3. **The main conversation view glides too.** While the reader is at the
+   bottom (follow mode), streamed agent output glides up instead of jumping in
+   token chunks: the bundle's follow re-pin is intercepted and handed to an
+   exponential chaser (same 70 ms `CHASE_TAU_MS` constant), and both the
+   reader's return within the 45 px re-follow zone and the back-to-bottom
+   button land with a glide rather than a snap. Any upward reader input stops
+   follow mode immediately; a content-growth observer on the scroller re-arms
+   a stopped chase while the reader is at the bottom, so a stale bundle
+   `atBottom` sample cannot strand the view. Chase writes go through the
+   original prototype setter (bypassing the re-pin trap) and land exactly at
+   the floor, so the bundle's 500 ms at-bottom bookkeeping stays coherent.
+   **Kill switch / rollback:** the `MAIN_SMOOTH_FOLLOW` constant at the top of
+   `lib/client.js` — `false` restores the bundle's current snap behavior for
+   the main view (the think-row follower keeps working); see Rollback.
+
+## Rollback
+
+The git repo IS the rollback mechanism: every deployed state is a commit.
+
+- Revert to a previous state: `git checkout <sha>` then `pwsh -File
+  deploy.ps1` (e.g. `git checkout 3e55717` restores the working
+  smooth-think / snap-main state; then refresh the GUI).
+- In-place switch: `MAIN_SMOOTH_FOLLOW = false` in `lib/client.js` +
+  redeploy turns off only the main-body glide.
+- Last resort: the pre-feature known-good `client.js` is snapshotted in
+  `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
+
 ## Deployment (quickstart in a new environment)
 
 This repo IS the deployable. No build step (plain JS):
@@ -170,10 +197,25 @@ restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
   features are unaffected). Native reader scrolling is never affected either
   way.
 - **Bottom-out nudge is a real (small) jump.** A downward arrival in the
-  25–45 px band visibly nudges the view to the true bottom (≤45 px). That is
-  the requested 45 px re-follow semantics — the bundle's own bookkeeping only
+  25–45 px band pulls the view to the true bottom (≤45 px). That is the
+  requested 45 px re-follow semantics — the bundle's own bookkeeping only
   accepts ≤25 px — but a reader who stops exactly in the band is pulled the
-  last few pixels instead of being left there.
+  last few pixels instead of being left there. With `MAIN_SMOOTH_FOLLOW` on
+  (the default) this pull glides instead of jumping; the kill switch restores
+  the snap.
+- **Main-body smooth follow (newest feature, first to flip off).** The
+  conversation scroller's glide is a per-scroller rAF chaser that writes
+  `scrollTop` through the original prototype setter, bypassing the re-pin
+  trap — so chase writes are never misclassified and the bundle's 500 ms
+  at-bottom sample stays coherent (the chase lands exactly at the floor, 0
+  px). Mid-glide the bundle sees "not at bottom", which matches its own
+  follow semantics (it stops re-pinning while the reader is technically
+  above the floor). The chaser is self-terminating (one rAF chain, no
+  timers). If the glide ever misbehaves, `MAIN_SMOOTH_FOLLOW = false` +
+  redeploy restores the pre-feature behavior in effect — verified branch by
+  branch: with the switch off, every trigger (growth observer, re-pin
+  intercept, reader return, jump button) falls back to the original snap
+  path, and the only residue is one inert content observer per scroller.
 - **Back-to-bottom button identification.** The button is recognized
   structurally (the only `<button>` inside the conversation scroller, outside
   the `[data-chat-flow]` column), not by a stable attribute. If a future
