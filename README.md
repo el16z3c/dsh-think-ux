@@ -20,9 +20,11 @@ guarantee is a graceful, documented degradation — not immunity.
    (line height taken from the bundle's own secondary-content token,
    `calc(20px + var(--dsh-content-font-delta-secondary,0px))`), with 24 px
    top/bottom fades. It is a hidden-scrollbar scroll box that a single rAF
-   ticker **chases to the bottom** with exponential easing (70 ms time
-   constant, `CHASE_TAU_MS`), so appended streaming text glides up smoothly
-   instead of jumping in token chunks. A reader scroll up inside the preview
+   ticker **chases to the bottom** with capped exponential easing (70 ms
+   time constant, `CHASE_TAU_MS`; velocity capped at `CHASE_MAX_PX` per
+   60 fps frame so a large reflow glides at constant speed instead of
+   swooshing), so appended streaming text glides up smoothly instead of
+   jumping in token chunks. A reader scroll up inside the preview
    **pauses** that row's follow (terminal style); returning within 25 px of
    the bottom resumes it. The cap applies only to plugin-managed rows: a
    reader toggle lifts it permanently for that row (their expansion is
@@ -89,6 +91,17 @@ guarantee is a graceful, documented degradation — not immunity.
    `atBottom` sample cannot strand the view. Chase writes go through the
    original prototype setter (bypassing the re-pin trap) and land exactly at
    the floor, so the bundle's 500 ms at-bottom bookkeeping stays coherent.
+   The chase is **velocity-capped** (`CHASE_MAX_PX` px per 60 fps frame,
+   frame-rate-scaled): small gaps (streaming deltas) stay pure exponential,
+   large gaps (a new tool-call row or a body block landing in one commit,
+   100–400 px) glide at a constant ~960 px/s — the handoff at the cap is
+   continuous, so there is no visible kink (uncapped, the chase's first
+   frame on a 400 px gap covers 85 px: a swoosh, the "new tool call snaps"
+   symptom). Scroll **methods** are shadowed too: a `scrollTo`/`scrollBy`
+   call on the scroller bypasses the property trap, so a bottom-targeted
+   call made with no armed reader intent (e.g. the turn rail's follow) is
+   swallowed and handed to the chaser (glide); every other call passes
+   through untouched (rail centering, saved-position restore).
    **Kill switch / rollback:** the `MAIN_SMOOTH_FOLLOW` constant at the top of
    `lib/client.js` — `false` restores the bundle's current snap behavior for
    the main view (the think-row follower keeps working); see Rollback.
@@ -101,7 +114,13 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   deploy.ps1` (e.g. `git checkout 3e55717` restores the working
   smooth-think / snap-main state; then refresh the GUI).
 - In-place switch: `MAIN_SMOOTH_FOLLOW = false` in `lib/client.js` +
-  redeploy turns off only the main-body glide.
+  redeploy turns off only the main-body glide (the chase cap, the method
+  shadows and the re-pin intent system are all gated on it — with it off
+  every scroll write passes through natively).
+- Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
+  the `[think-ux]` console.debug traces (intent arming, uncaught large
+  motion, native writes > 40 px); on while hunting a jank report, off to
+  silence.
 - Last resort: the pre-feature known-good `client.js` is snapshotted in
   `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
 
@@ -195,13 +214,16 @@ restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
   bounded either way). The fade mask is clamped (`min`/`max` stops) so short
   bodies (fewer than ~2 lines) degrade to a symmetric fade instead of an
   inverted gradient.
-- **Write-path assumption.** The trap only sees JS property assignments
-  (`el.scrollTop = x`), which is how 0.1.5-rc.2 performs every programmatic
-  scroll (toBottom, followRef, land-on-row, saved-position restore). If a
-  future version switches to `el.scrollTo(...)` or `scrollIntoView` for the
-  follow, re-pins bypass the trap and the yank becomes visible again (the row
-  features are unaffected). Native reader scrolling is never affected either
-  way.
+- **Write-path assumption.** The re-pin trap sees JS property assignments
+  (`el.scrollTop = x`); the scroll **methods** (`scrollTo`/`scrollBy` on the
+  bound scroller) are shadowed, so a bottom-targeted call with no armed
+  reader intent is also handed to the glide. Together they cover every
+  programmatic scroll in 0.1.5-rc.2 (toBottom, followRef, land-on-row,
+  saved-position restore, turn-rail `scrollTo`). If a future version
+  switches the follow to `scrollIntoView` (or another API), re-pins bypass
+  both layers and the yank becomes visible again (the row features are
+  unaffected; with `DIAGNOSTICS` on, the uncaught motion is named in the
+  console). Native reader scrolling is never affected either way.
 - **Bottom-out nudge is a real (small) jump.** A downward arrival in the
   25–45 px band pulls the view to the true bottom (≤45 px). That is the
   requested 45 px re-follow semantics — the bundle's own bookkeeping only
