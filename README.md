@@ -20,11 +20,12 @@ guarantee is a graceful, documented degradation — not immunity.
    (line height taken from the bundle's own secondary-content token,
    `calc(20px + var(--dsh-content-font-delta-secondary,0px))`), with 24 px
    top/bottom fades. It is a hidden-scrollbar scroll box that a single rAF
-   ticker **chases to the bottom** with capped exponential easing (70 ms
-   time constant, `CHASE_TAU_MS`; velocity capped at `CHASE_MAX_PX` per
-   60 fps frame so a large reflow glides at constant speed instead of
-   swooshing), so appended streaming text glides up smoothly instead of
-   jumping in token chunks. A reader scroll up inside the preview
+   ticker **chases to the bottom** with the same gap-dependent step as the
+   main view (70 ms time constant `CHASE_TAU_MS`; constant `CHASE_MAX_PX`
+   speed below 800 px, exponential above 2400 px, smoothstep between — the
+   preview body is at most ~500 px, so it stays in the smooth regime), so
+   appended streaming text glides up smoothly instead of jumping in token
+   chunks. A reader scroll up inside the preview
    **pauses** that row's follow (terminal style); returning within 25 px of
    the bottom resumes it. The cap applies only to plugin-managed rows: a
    reader toggle lifts it permanently for that row (their expansion is
@@ -91,13 +92,16 @@ guarantee is a graceful, documented degradation — not immunity.
    `atBottom` sample cannot strand the view. Chase writes go through the
    original prototype setter (bypassing the re-pin trap) and land exactly at
    the floor, so the bundle's 500 ms at-bottom bookkeeping stays coherent.
-   The chase is **velocity-capped** (`CHASE_MAX_PX` px per 60 fps frame,
-   frame-rate-scaled): small gaps (streaming deltas) stay pure exponential,
-   large gaps (a new tool-call row or a body block landing in one commit,
-   100–400 px) glide at a constant ~960 px/s — the handoff at the cap is
-   continuous, so there is no visible kink (uncapped, the chase's first
-   frame on a 400 px gap covers 85 px: a swoosh, the "new tool call snaps"
-   symptom). Scroll **methods** are shadowed too: a `scrollTo`/`scrollBy`
+   The chase speed is **gap-dependent** (`chaseStep`, shared by both
+   chasers): gaps up to `GAP_RAMP_START` (800 px) close at a constant
+   `CHASE_MAX_PX` px per 60 fps frame (~960 px/s) — a new tool-call row or
+   body block (100–400 px landing in one commit) glides smoothly instead of
+   swooshing; gaps from `GAP_RAMP_END` (2400 px) up close at the uncapped
+   exponential (21 % of the gap per frame at 60 fps) — opening a long
+   session swooshes to the bottom in ~1.5 s instead of crawling (30 000 px
+   was 31 s at the flat speed); between the two the speed blends via
+   smoothstep, so the regimes hand off C1-continuous (no visible kink).
+   Scroll **methods** are shadowed too: a `scrollTo`/`scrollBy`
    call on the scroller bypasses the property trap, so a bottom-targeted
    call made with no armed reader intent (e.g. the turn rail's follow) is
    swallowed and handed to the chaser (glide); every other call passes
@@ -117,6 +121,11 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   redeploy turns off only the main-body glide (the chase cap, the method
   shadows and the re-pin intent system are all gated on it — with it off
   every scroll write passes through natively).
+- Chase-speed states: `GAP_RAMP_END = 0` in `lib/client.js` + redeploy =
+  pure exponential everywhere (the pre-cap fast swoosh, ~1 s session open);
+  `GAP_RAMP_END = 9999999` = one flat 960 px/s speed for every gap (the
+  previous all-capped state); both `GAP_RAMP_START` / `GAP_RAMP_END` tune
+  the blend zone.
 - Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
   the `[think-ux]` console.debug traces (intent arming, uncaught large
   motion, native writes > 40 px); on while hunting a jank report, off to
