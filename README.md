@@ -135,11 +135,15 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   motivated the episode rule); the constant tunes which gaps swoosh vs
   glide.
 - Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
-  the `[think-ux]` console.debug traces (intent arming, episode
-  classification — `FAST episode gap=Npx`, `fast upgrade gap=Npx`,
-  `land ep=.. Nms` — uncaught motion > 16 px, native non-intercepted
-  writes > 16 px with the caller stack); on while hunting a jank report,
-  off to silence.
+  the `[think-ux]` traces (intent arming, episode classification —
+  `FAST episode gap=Npx`, `fast upgrade gap=Npx`, `land ep=.. Nms` —
+  uncaught motion > 16 px, native non-intercepted writes > 16 px with
+  the caller stack); on while hunting a jank report, off to silence.
+  Each trace line is ALSO mirrored to the trace sink
+  (`TRACE_SINK_URL`, default `http://127.0.0.1:3999/`) via fire-and-forget
+  POSTs — start `trace-sink.cjs` (workspace cleanup-review) to collect
+  the log as JSONL on disk; a missing sink is a silent no-op, and
+  `TRACE_SINK_URL = null` disables the mirror entirely.
 - Last resort: the pre-feature known-good `client.js` is snapshotted in
   `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
 
