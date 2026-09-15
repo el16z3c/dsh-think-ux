@@ -27,8 +27,10 @@ guarantee is a graceful, documented degradation — not immunity.
    clears the transition but KEEPS the inline `height: 0` so the body
    unmounts with zero residue (clearing it first would flash the natural
    full height for a frame under load). A reader toggle during the
-   animation cancels it (the body hands back to its natural height);
-   `COLLAPSE_MS = 0` restores the instant unmount.
+   animation cancels it (the body hands back to its natural height); a row
+   REMOVED mid-animation (settle + unmount in the same frame) is cleaned up
+   by the removal path (the record and listeners do not linger on the
+   detached node); `COLLAPSE_MS = 0` restores the instant unmount.
    History rows and rows under `[data-turn-process-inline][hidden]` are left
    alone.
    While auto-expanded, the body is a **capped preview**: at most 24 lines
