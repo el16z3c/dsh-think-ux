@@ -117,6 +117,19 @@ guarantee is a graceful, documented degradation — not immunity.
    `lib/client.js` — `false` restores the bundle's current snap behavior for
    the main view (the think-row follower keeps working); see Rollback.
 
+4. **One active instance per document (singleton takeover).** The cordis
+   runner registers this plugin per conversation surface: every in-page
+   session switch invalidates + re-loads the module, creating a new plugin
+   instance in the SAME document. Left alone, N live instances each run a
+   document-wide MutationObserver and bind EVERY conversation scroller, so N
+   chaser loops step on the same scroller — the source of the intermittent
+   stiff follow (a fresh page has few live instances; after session switches
+   it has many). The newest instance takes over the document: it publishes
+   itself on `globalThis.__DSH_THINK_UX_LIVE__` and releases its predecessor
+   (observer, traps, rAF chasers, write probe, style tag). Teardown is
+   idempotent, so the runner's effect cleanup of a superseded instance is a
+   no-op.
+
 ## Rollback
 
 The git repo IS the rollback mechanism: every deployed state is a commit.
@@ -143,7 +156,11 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   (`TRACE_SINK_URL`, default `http://127.0.0.1:3999/`) via fire-and-forget
   POSTs — start `trace-sink.cjs` (workspace cleanup-review) to collect
   the log as JSONL on disk; a missing sink is a silent no-op, and
-  `TRACE_SINK_URL = null` disables the mirror entirely.
+  `TRACE_SINK_URL = null` disables the mirror entirely. Every trace line
+  carries a 4-char per-instance id (`[think-ux:XXXX]`) so instances from
+  different surfaces are separable in the shared log; the lifecycle lines
+  `instance up (doc title=...)`, `takeover from instance XXXX` and
+  `instance down (XXXX)` show the singleton hand-off.
 - Last resort: the pre-feature known-good `client.js` is snapshotted in
   `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
 
