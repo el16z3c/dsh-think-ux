@@ -18,9 +18,17 @@ guarantee is a graceful, documented degradation — not immunity.
    (`COLLAPSE_MS`, 180 ms) BEFORE the unmounting click: an instant body
    removal drops ~490 px of content in one frame and clamps a
    bottom-pinned reader down by the whole box in one visible jump, while the
-   animation lets the browser clamp frame by frame (a smooth slide). A
-   reader toggle during the animation cancels it (the body hands back to
-   its natural height); `COLLAPSE_MS = 0` restores the instant unmount.
+   animation lets the browser clamp frame by frame (a smooth slide). The
+   animation ENDS via the body's own `transitionend` (guarded by target +
+   property); a `COLLAPSE_MS + 300` ms safety timer — started at the
+   animation's real start, not the settle — ends it early if the transition
+   never completes (hidden tab, cancelled mid-flight, long main-thread
+   stall; the early end just skips the tail of the slide). The finish
+   clears the transition but KEEPS the inline `height: 0` so the body
+   unmounts with zero residue (clearing it first would flash the natural
+   full height for a frame under load). A reader toggle during the
+   animation cancels it (the body hands back to its natural height);
+   `COLLAPSE_MS = 0` restores the instant unmount.
    History rows and rows under `[data-turn-process-inline][hidden]` are left
    alone.
    While auto-expanded, the body is a **capped preview**: at most 24 lines
