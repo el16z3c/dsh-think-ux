@@ -128,7 +128,10 @@ guarantee is a graceful, documented degradation — not immunity.
    call on the scroller bypasses the property trap, so a bottom-targeted
    call made with no armed reader intent (e.g. the turn rail's follow) is
    swallowed and handed to the chaser (glide); every other call passes
-   through untouched (rail centering, saved-position restore).
+   through untouched (rail centering, saved-position restore). The
+   `scrollTo(x, y)` form reads the SECOND argument as the vertical
+   coordinate (the first is horizontal; a single-number call is x-only),
+   matching the DOM spec.
    **Kill switch / rollback:** the `MAIN_SMOOTH_FOLLOW` constant at the top of
    `lib/client.js` — `false` restores the bundle's current snap behavior for
    the main view (the think-row follower keeps working); see Rollback.
@@ -169,20 +172,21 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   for every gap (the all-capped state, whose slow tail on session open
   motivated the episode rule); the constant tunes which gaps swoosh vs
   glide.
-- Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
-  the `[think-ux]` traces (intent arming, every episode start
-  `episode sc#N fast|smooth gap=Npx`, `chase fast frame step=Npx`,
-  `fast upgrade gap=Npx`, `land ep=.. Nms`, uncaught motion > 16 px
-  with the isTrusted flag, native non-intercepted writes > 16 px with
-  the caller stack); on while hunting a jank report, off to silence.
-  Each trace line is ALSO mirrored to the trace sink
-  (`TRACE_SINK_URL`, default `http://127.0.0.1:3999/`) via fire-and-forget
-  POSTs — start `trace-sink.cjs` (workspace cleanup-review) to collect
-  the log as JSONL on disk; a missing sink is a silent no-op, and
-  `TRACE_SINK_URL = null` disables the mirror entirely. Every trace line
-  carries a 4-char per-instance id (`[think-ux:XXXX]`) so instances from
-  different surfaces are separable in the shared log; the lifecycle lines
-  `instance up (doc title=...)`, `takeover from instance XXXX` and
+- Diagnostics: the final build ships with `DIAGNOSTICS = false` and
+  `TRACE_SINK_URL = null` — no prototype probe, no console traces, no
+  sink POSTs (the ~22k-line hunt log came from the on-state). To hunt a
+  jank report: `DIAGNOSTICS = true` +
+  `TRACE_SINK_URL = "http://127.0.0.1:3999/"` in `lib/client.js` +
+  redeploy, start `trace-sink.cjs` (workspace cleanup-review) to
+  collect the log as JSONL on disk, then reproduce. Traces cover intent
+  arming, every episode start `episode sc#N fast|smooth gap=Npx`,
+  `chase fast frame step=Npx`, `fast upgrade gap=Npx`, `land ep=.. Nms`,
+  uncaught motion > 16 px with the isTrusted flag, native
+  non-intercepted writes > 16 px with the caller stack; every line is
+  mirrored via fire-and-forget POSTs (a missing sink is a silent no-op)
+  and carries a 4-char per-instance id (`[think-ux:XXXX]`) so instances
+  from different surfaces are separable in the shared log; the lifecycle
+  lines `instance up (doc title=...)`, `takeover from instance XXXX` and
   `instance down (XXXX)` show the singleton hand-off.
 - Last resort: the pre-feature known-good `client.js` is snapshotted in
   `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
@@ -226,10 +230,14 @@ restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
 ## Constraints honored
 
 - No `@deepseek-ai/*` requires; `inject: []` (pure DOM, no bundle services).
-- No bare `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`/`fetch` —
-  those globals are withheld from dynamic client packages by the runner's
-  closure traps. Timed behavior uses `Date.now()` + `requestAnimationFrame` +
-  MutationObserver only.
+- No bare `fetch` (the runner's closure trap shadows it with a throwing
+  redirect on per-agent (re)loads — the trace mirror goes through
+  `window.fetch`). Timer globals (`setTimeout`/`clearTimeout`) ARE
+  available in the 0.1.5-rc.2 runner: the settle collapse (`COLLAPSE_MS`)
+  uses them, verified at runtime; if a future runner withholds them the
+  collapse self-degrades to the instant unmount (try/catch guard).
+  Everything else runs on `Date.now()` + `requestAnimationFrame` +
+  MutationObserver.
 - `ctx.effect(callback, label)` is a context verb and needs no service
   declaration; unload cascades the effect cleanup (observer, listeners, maps).
 - Selectors are stable attributes only (`data-conversation-scroll`,
