@@ -20,12 +20,11 @@ guarantee is a graceful, documented degradation — not immunity.
    (line height taken from the bundle's own secondary-content token,
    `calc(20px + var(--dsh-content-font-delta-secondary,0px))`), with 24 px
    top/bottom fades. It is a hidden-scrollbar scroll box that a single rAF
-   ticker **chases to the bottom** with the same gap-dependent step as the
-   main view (70 ms time constant `CHASE_TAU_MS`; constant `CHASE_MAX_PX`
-   speed below 800 px, exponential above 2400 px, smoothstep between — the
-   preview body is at most ~500 px, so it stays in the smooth regime), so
-   appended streaming text glides up smoothly instead of jumping in token
-   chunks. A reader scroll up inside the preview
+   ticker **chases to the bottom** with the main view's smooth-episode
+   step (70 ms time constant `CHASE_TAU_MS`, constant `CHASE_MAX_PX`
+   speed ~960 px/s — the preview body is at most ~500 px, below the
+   `GAP_FAST_MIN` threshold, so it always glides), so appended streaming
+   text glides up smoothly instead of jumping in token chunks. A reader scroll up inside the preview
    **pauses** that row's follow (terminal style); returning within 25 px of
    the bottom resumes it. The cap applies only to plugin-managed rows: a
    reader toggle lifts it permanently for that row (their expansion is
@@ -92,15 +91,23 @@ guarantee is a graceful, documented degradation — not immunity.
    `atBottom` sample cannot strand the view. Chase writes go through the
    original prototype setter (bypassing the re-pin trap) and land exactly at
    the floor, so the bundle's 500 ms at-bottom bookkeeping stays coherent.
-   The chase speed is **gap-dependent** (`chaseStep`, shared by both
-   chasers): gaps up to `GAP_RAMP_START` (800 px) close at a constant
-   `CHASE_MAX_PX` px per 60 fps frame (~960 px/s) — a new tool-call row or
-   body block (100–400 px landing in one commit) glides smoothly instead of
-   swooshing; gaps from `GAP_RAMP_END` (2400 px) up close at the uncapped
-   exponential (21 % of the gap per frame at 60 fps) — opening a long
-   session swooshes to the bottom in ~1.5 s instead of crawling (30 000 px
-   was 31 s at the flat speed); between the two the speed blends via
-   smoothstep, so the regimes hand off C1-continuous (no visible kink).
+   The chase speed is set **per episode** (`chaseStep` + `st.episode`,
+   shared by both chasers): each chase episode — a gap created by one
+   content event, closed to the tail — runs at ONE speed, chosen from the
+   gap the episode STARTS with (a speed that tracks the shrinking gap
+   decays a big swoosh into the slow flat speed in the last ~800 px and
+   visibly crawls home — "fast to near the bottom, then slow"):
+   - starting gap >= `GAP_FAST_MIN` (800 px): pure exponential (21 % of
+     the gap per frame at 60 fps) for the WHOLE episode — opening a long
+     session swooshes all the way to the bottom (~0.7 s for 30 000 px),
+     no slow tail;
+   - starting gap < 800 px: constant `CHASE_MAX_PX` px per 60 fps frame
+     (~960 px/s) — a new tool-call row or body block (100–400 px in one
+     commit) glides smoothly instead of swooshing.
+   Episodes re-classify after each landing and upgrade smooth -> fast
+   when a big insertion grows the gap past the threshold mid-episode
+   (a large content block is a swoosh, not a crawl; no downgrade, so no
+   oscillation).
    Scroll **methods** are shadowed too: a `scrollTo`/`scrollBy`
    call on the scroller bypasses the property trap, so a bottom-targeted
    call made with no armed reader intent (e.g. the turn rail's follow) is
@@ -121,11 +128,12 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   redeploy turns off only the main-body glide (the chase cap, the method
   shadows and the re-pin intent system are all gated on it — with it off
   every scroll write passes through natively).
-- Chase-speed states: `GAP_RAMP_END = 0` in `lib/client.js` + redeploy =
-  pure exponential everywhere (the pre-cap fast swoosh, ~1 s session open);
-  `GAP_RAMP_END = 9999999` = one flat 960 px/s speed for every gap (the
-  previous all-capped state); both `GAP_RAMP_START` / `GAP_RAMP_END` tune
-  the blend zone.
+- Chase-speed states: `GAP_FAST_MIN = 0` in `lib/client.js` + redeploy =
+  pure exponential everywhere (fast swoosh for every gap, including
+  streaming inserts); `GAP_FAST_MIN = 9999999` = one flat 960 px/s speed
+  for every gap (the all-capped state, whose slow tail on session open
+  motivated the episode rule); the constant tunes which gaps swoosh vs
+  glide.
 - Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
   the `[think-ux]` console.debug traces (intent arming, uncaught large
   motion, native writes > 40 px); on while hunting a jank report, off to
