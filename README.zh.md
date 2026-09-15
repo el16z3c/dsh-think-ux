@@ -35,4 +35,4 @@ dsh plugin --profile web remove dsh-think-ux
 
 ## 已知边界（诚实版）
 
-详见英文 README 的 Residual risks：依赖稳定 DOM 属性、点击切换语义、bundle 的裸 `scrollTop` 写入路径；任一失效时插件**安静地退化为官方默认行为**，不报错、不破坏宿主 UI。
+已在 DSH 0.1.5-rc.2 验证，依赖该版本的 DOM 属性和客户端加载协议。详见英文 README 的 Residual risks：行为假设（稳定 DOM 属性、点击切换语义、bundle 的裸 `scrollTop` 写入路径）失效时，插件安静地退化为官方默认行为（不报错）。**退化承诺只覆盖行为假设**——注册/清单类错误不会安静退化：0.1.0 曾因客户端注册名与包名不一致，导致**整个 Web UI 加载失败**（页面显示 "Failed to load plugins"）。若见到该页面且点名 `dsh-think-ux`，请升级：`dsh plugin --profile web update dsh-think-ux`（npm 上 0.1.0 已标废，0.1.1 修复，注册名一致性测试随包）。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-think-ux",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Smooth think-row preview + bottom-follow glide for the DeepSeek Harness (dsh) Web UI: a pure DOM client plugin, no bundle changes",
   "license": "MIT",
   "repository": {

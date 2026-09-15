@@ -6,7 +6,8 @@ to the bottom as text streams in; when reasoning settles, the preview
 collapses with a short height animation instead of a one-frame ~490 px
 jump. The main conversation view follows the same way — streamed output
 glides up (long-session opens swoosh), and a `scrollTop` write trap makes
-reader-vs-bundle scroll intent unambiguous, so nothing yanks you around.
+reader-vs-bundle scroll intent unambiguous, so the view glides instead of
+snapping.
 
 Pure DOM client plugin: no bundle changes, no services, no network calls,
 no timers beyond one settle animation. Verified against DSH 0.1.5-rc.2.
@@ -45,10 +46,17 @@ Refresh; the Web UI returns to stock behavior. Nothing to clean up.
 Any change is a one-line edit + reinstall of the local copy (see Local
 development).
 
-It is NOT upgrade-proof: it relies on stable DOM attributes, a
-click-to-toggle row, and the bundle's plain `scrollTop` write path (see
-Residual risks). Its guarantee is a graceful, documented degradation — not
-immunity.
+It is NOT upgrade-proof. It is verified against DSH 0.1.5-rc.2 and depends
+on that version's DOM attributes and client load protocol. Behavioral
+assumptions (the selectors, the click-to-toggle row, the bundle's plain
+`scrollTop` write path) degrade quietly when broken — the plugin simply
+stops doing its thing (see Residual risks). Registration/manifest
+mismatches do NOT degrade quietly: the 0.1.0 release shipped a client
+registration name that did not match the package name, and that made the
+whole Web UI fail to load ("Failed to load plugins", not stock behavior).
+If you see that page naming `dsh-think-ux`, you are on 0.1.0 — run
+`dsh plugin --profile web update dsh-think-ux` (0.1.0 is deprecated on npm;
+0.1.1 fixed it).
 
 ## Behavior
 
