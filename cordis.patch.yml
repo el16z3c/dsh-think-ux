@@ -1,0 +1,6 @@
+# dsh-think-ux bundle patch: registers the client plugin into the Web UI.
+# The entry is resolved from this package's exports (lib/index.js); the
+# browser half (lib/client.js) does all the work — pure DOM, no services.
+- insert:
+    - id: dsh-think-ux
+      name: 'dsh-think-ux'

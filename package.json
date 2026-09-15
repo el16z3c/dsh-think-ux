@@ -1,7 +1,24 @@
 {
-  "name": "local-dsh-think-ux",
-  "version": "1.0.0",
-  "private": true,
+  "name": "dsh-think-ux",
+  "version": "0.1.0",
+  "description": "Smooth think-row preview + bottom-follow glide for the DeepSeek Harness (dsh) Web UI: a pure DOM client plugin, no bundle changes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/el16z3c/dsh-think-ux.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "client-plugin",
+    "web",
+    "scroll",
+    "ux"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -9,7 +26,14 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [],
       "platform": "web"

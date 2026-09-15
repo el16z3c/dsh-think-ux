@@ -1,10 +1,54 @@
-# local-dsh-think-ux
+# dsh-think-ux
 
-DOM-layer client plugin that replaces the two first-generation bundle patches
-(think-expand + autoscroll gesture guard) with a proper DSH client plugin.
-It is NOT upgrade-proof: it relies on stable DOM attributes, a click-to-toggle
-row, and the bundle's plain `scrollTop` write path (see Residual risks). Its
-guarantee is a graceful, documented degradation — not immunity.
+Smooth "thinking" experience for the DeepSeek Harness (dsh) Web UI: while a
+model reasons, its think row expands as a capped 24-line preview that glides
+to the bottom as text streams in; when reasoning settles, the preview
+collapses with a short height animation instead of a one-frame ~490 px
+jump. The main conversation view follows the same way — streamed output
+glides up (long-session opens swoosh), and a `scrollTop` write trap makes
+reader-vs-bundle scroll intent unambiguous, so nothing yanks you around.
+
+Pure DOM client plugin: no bundle changes, no services, no network calls,
+no timers beyond one settle animation. Verified against DSH 0.1.5-rc.2.
+
+[![awesome-dsh](https://img.shields.io/endpoint?url=https%3A%2F%2Fawesome-dsh-plugin.com%2Fbadge.svg)](https://awesome-dsh-plugin.com/)
+
+## Install
+
+```sh
+dsh plugin --profile web add dsh-think-ux
+```
+
+Then refresh the Web session (the profile layer picks it up on reload).
+For another profile: `dsh plugin --profile <name> add dsh-think-ux`.
+
+## Uninstall
+
+```sh
+dsh plugin --profile web remove dsh-think-ux
+```
+
+Refresh; the Web UI returns to stock behavior. Nothing to clean up.
+
+## Tunable constants (top of `lib/client.js`)
+
+| Constant | Default | Effect |
+|---|---|---|
+| `CAP_LINES` | 24 | think-preview line cap |
+| `CHASE_TAU_MS` | 70 | glide exponential time constant (both chasers) |
+| `CHASE_MAX_PX` | 16 | constant glide speed (px per 60 fps frame, ~960 px/s) |
+| `GAP_FAST_MIN` | 800 | episode split: starting gap ≥ this = pure exponential swoosh, below = constant glide |
+| `COLLAPSE_MS` | 180 | settle-collapse animation duration; `0` = instant unmount |
+| `MAIN_SMOOTH_FOLLOW` | true | kill switch for the main-view glide + anchor override + method shadows |
+| `READER_INTENT_TTL_MS` | 700 | reader-intent window (covers the bundle's 500 ms sample) |
+
+Any change is a one-line edit + reinstall of the local copy (see Local
+development).
+
+It is NOT upgrade-proof: it relies on stable DOM attributes, a
+click-to-toggle row, and the bundle's plain `scrollTop` write path (see
+Residual risks). Its guarantee is a graceful, documented degradation — not
+immunity.
 
 ## Behavior
 
@@ -198,18 +242,19 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   from different surfaces are separable in the shared log; the lifecycle
   lines `instance up (doc title=...)`, `takeover from instance XXXX` and
   `instance down (XXXX)` show the singleton hand-off.
-- Last resort: the pre-feature known-good `client.js` is snapshotted in
-  `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
+- Last resort: uninstall (above) — the Web UI falls back to stock behavior.
 
-## Deployment (quickstart in a new environment)
+## Local development (file:// path)
 
-This repo IS the deployable. No build step (plain JS):
+For hacking on the plugin (or for installs that predate the npm package):
+no build step (plain JS):
 
 ```
-package.json   name local-dsh-think-ux, dsh.client.platform=web, inject: []
+package.json   dsh.bundle.patch + dsh.client.platform=web, inject: []
 lib/index.js   host half — marker only, apply() no-op
 lib/client.js  browser half — all behavior
-deploy.ps1     parameterized deployer (SHA-verified, prints profile snippet)
+deploy.ps1     parameterized file:// deployer (SHA-verified, prints profile snippet)
+trace-sink.cjs  local HTTP sink for the DIAGNOSTICS mirror (dev only)
 ```
 
 One command, from the repo root:
