@@ -135,9 +135,11 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   motivated the episode rule); the constant tunes which gaps swoosh vs
   glide.
 - Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
-  the `[think-ux]` console.debug traces (intent arming, uncaught large
-  motion, native writes > 40 px); on while hunting a jank report, off to
-  silence.
+  the `[think-ux]` console.debug traces (intent arming, episode
+  classification — `FAST episode gap=Npx`, `fast upgrade gap=Npx`,
+  `land ep=.. Nms` — uncaught motion > 16 px, native non-intercepted
+  writes > 16 px with the caller stack); on while hunting a jank report,
+  off to silence.
 - Last resort: the pre-feature known-good `client.js` is snapshotted in
   `backup\dsh-think-ux-smooth-think-3e55717\` (workspace, outside the repo).
 
