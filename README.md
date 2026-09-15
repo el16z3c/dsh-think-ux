@@ -13,7 +13,14 @@ guarantee is a graceful, documented degradation — not immunity.
    its `[data-disclosure-row]` element (React keeps owning the state). When the
    row settles (`data-state="ok"`) the plugin auto-collapses it — unless the
    reader toggled that row themselves; a trusted click on the row hands it over
-   permanently (plugin never touches it again for the row's lifetime).
+   permanently (plugin never touches it again for the row's lifetime). The
+   collapse plays a short height animation on the capped body
+   (`COLLAPSE_MS`, 180 ms) BEFORE the unmounting click: an instant body
+   removal drops ~490 px of content in one frame and clamps a
+   bottom-pinned reader down by the whole box in one visible jump, while the
+   animation lets the browser clamp frame by frame (a smooth slide). A
+   reader toggle during the animation cancels it (the body hands back to
+   its natural height); `COLLAPSE_MS = 0` restores the instant unmount.
    History rows and rows under `[data-turn-process-inline][hidden]` are left
    alone.
    While auto-expanded, the body is a **capped preview**: at most 24 lines
@@ -108,6 +115,15 @@ guarantee is a graceful, documented degradation — not immunity.
    when a big insertion grows the gap past the threshold mid-episode
    (a large content block is a swoosh, not a crawl; no downgrade, so no
    oscillation).
+   Browser scroll anchoring (`overflow-anchor`, default `auto`) is
+   disabled on each bound scroller while `MAIN_SMOOTH_FOLLOW` is on:
+   with the reader pinned at the bottom, an insertion of a large chunk
+   (a tool row, a code block) makes the anchoring adjustment shift
+   `scrollTop` by the WHOLE chunk in one frame — a native snap, visible
+   as a stiff jump, and it fights the 16 px/frame chase. With anchoring
+   off, every bottom tracking goes through the episode-speed chase
+   (glide for small gaps, swoosh for large ones). The pre-override
+   inline value is restored on unbind.
    Scroll **methods** are shadowed too: a `scrollTo`/`scrollBy`
    call on the scroller bypasses the property trap, so a bottom-targeted
    call made with no armed reader intent (e.g. the turn rail's follow) is
@@ -138,9 +154,15 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   deploy.ps1` (e.g. `git checkout 3e55717` restores the working
   smooth-think / snap-main state; then refresh the GUI).
 - In-place switch: `MAIN_SMOOTH_FOLLOW = false` in `lib/client.js` +
-  redeploy turns off only the main-body glide (the chase cap, the method
-  shadows and the re-pin intent system are all gated on it — with it off
-  every scroll write passes through natively).
+  redeploy turns off only the main-body glide (the chase, the method
+  shadows, the re-pin intent system and the `overflow-anchor: none`
+  override are all gated on it — with it off every scroll write passes
+  through natively and the scroller's pre-override anchor value is
+  restored on unbind).
+- Settle-collapse animation: `COLLAPSE_MS = 0` in `lib/client.js` +
+  redeploy = instant unmount on settle (the pre-animation behavior,
+  whose one-frame ~490 px clamp jump at each turn boundary was the
+  visible stiff snap); any small value is the animation duration.
 - Chase-speed states: `GAP_FAST_MIN = 0` in `lib/client.js` + redeploy =
   pure exponential everywhere (fast swoosh for every gap, including
   streaming inserts); `GAP_FAST_MIN = 9999999` = one flat 960 px/s speed
@@ -148,9 +170,10 @@ The git repo IS the rollback mechanism: every deployed state is a commit.
   motivated the episode rule); the constant tunes which gaps swoosh vs
   glide.
 - Diagnostics: `DIAGNOSTICS = false` in `lib/client.js` + redeploy silences
-  the `[think-ux]` traces (intent arming, episode classification —
-  `FAST episode gap=Npx`, `fast upgrade gap=Npx`, `land ep=.. Nms` —
-  uncaught motion > 16 px, native non-intercepted writes > 16 px with
+  the `[think-ux]` traces (intent arming, every episode start
+  `episode sc#N fast|smooth gap=Npx`, `chase fast frame step=Npx`,
+  `fast upgrade gap=Npx`, `land ep=.. Nms`, uncaught motion > 16 px
+  with the isTrusted flag, native non-intercepted writes > 16 px with
   the caller stack); on while hunting a jank report, off to silence.
   Each trace line is ALSO mirrored to the trace sink
   (`TRACE_SINK_URL`, default `http://127.0.0.1:3999/`) via fire-and-forget
