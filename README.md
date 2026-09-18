@@ -154,7 +154,13 @@ If you see that page naming `dsh-think-ux`, you are on 0.1.0 — run
    token chunks: the bundle's follow re-pin is intercepted and handed to an
    exponential chaser (same 70 ms `CHASE_TAU_MS` constant), and both the
    reader's return within the 45 px re-follow zone and the back-to-bottom
-   button land with a glide rather than a snap. Any upward reader input stops
+   button land with a glide rather than a snap. Turn-rail navigation glides
+   too: a right-rail jump to a past turn lands through the bundle's
+   `landOnRow` property write, which is identified by its caller stack (not
+   its destination), swallowed, and chased to the row with the same episode
+   machine; a re-land write while the glide is running (a chunk reflow while
+   an unloaded turn loads) retargets it and keeps the episode speed. Any
+   upward reader input stops
    follow mode immediately; a content-growth observer on the scroller re-arms
    a stopped chase while the reader is at the bottom, so a stale bundle
    `atBottom` sample cannot strand the view. Chase writes go through the
@@ -388,6 +394,14 @@ restart needed). On a DSH version upgrade: rerun `deploy.ps1 -Version
   within 25 px of the bottom, made while the 700 ms intent window is open and
   no new reader-initiated element appeared since arming, is indistinguishable
   from a re-pin and gets reverted. Rare combination; jumping again works.
+- **Row-glide writer identification.** Turn-rail navigation is recognized by
+  the writer's caller stack (`landOnRow` / `realizePendingJump`), captured at
+  the write. If a future bundle renames these internals, rail jumps stop
+  matching and fall back to the bundle's native snap — no breakage, and no
+  other behavior is affected. The bundle's anchor-compensation corrections
+  (which keep the reader's row stable across prepends) come from a different
+  stack and stay instant by construction: gliding a correction would drift
+  the view under a reader mid-page.
 - **Cosmetic flicker.** A reverted re-pin still runs the bundle's `toBottom`
   side effects (`setAtBottom(true)`, active-turn update) before the restore, so
   the "jump to bottom" affordance can flicker once per revert; the bundle's own

@@ -24,7 +24,7 @@ dsh plugin --profile web remove dsh-think-ux
 
 1. **思考盒**：流式推理时自动展开（合成点击，React 状态仍归 bundle）；用户自己点过的行永久交给用户，插件不再碰。settle 后自动收起，收起播放 `COLLAPSE_MS` 高度动画（`transitionend` 收尾 + 起点计时安全网；`COLLAPSE_MS = 0` 恢复瞬收）。预览限高 24 行、24 px 上下渐隐、隐藏滚动条，由 rAF 追踪器平滑追底；预览内向上滚暂停跟随，回到底部 25 px 内恢复。
 2. **滚动意图**：读者向上滚（轮询/触摸/PageUp/Home/任意 scrollTop 上漂）武装 700 ms 意图窗口；窗口内 bundle 的「回钉」写入（`el.scrollTop = el.scrollHeight`）被同 tick 撤销、读者位置原样保留。落点距底 45 px 内视为读者回归，主动落底让 bundle 自己的 25 px 簿记恢复跟随；读者新消息/回底按钮的跳转放行。
-3. **主视图滑行**：跟随模式下 bundle 回钉被交给指数追逐器；按「回合」选速——起始间隙 ≥ `GAP_FAST_MIN`(800 px) 全程纯指数（开长会话 swoosh），小于则恒定 `CHASE_MAX_PX`(16 px/帧 ≈ 960 px/s) 滑行；中途大插入可升级、不降级。同时禁用 scroller 的 `overflow-anchor`（大段插入的整块锚定偏移是一帧硬跳的根因之一，卸载时恢复原值）；`scrollTo`/`scrollBy` 影子把无意图的「滚到底」调用也交给追逐器（`scrollTo(x, y)` 按 DOM 规范读第二参数为纵坐标）。
+3. **主视图滑行**：跟随模式下 bundle 回钉被交给指数追逐器；按「回合」选速——起始间隙 ≥ `GAP_FAST_MIN`(800 px) 全程纯指数（开长会话 swoosh），小于则恒定 `CHASE_MAX_PX`(16 px/帧 ≈ 960 px/s) 滑行；中途大插入可升级、不降级。同时禁用 scroller 的 `overflow-anchor`（大段插入的整块锚定偏移是一帧硬跳的根因之一，卸载时恢复原值）；`scrollTo`/`scrollBy` 影子把无意图的「滚到底」调用也交给追逐器（`scrollTo(x, y)` 按 DOM 规范读第二参数为纵坐标）。右侧轨迹条跳转到历史轮次（bundle 的 `landOnRow` 属性写入，按调用栈识别而非按目的地）同样滑行到目标行而非硬跳；滑行途中的 reflow 再落点只改目标、保留当前速度，读者输入随时取消。bundle 未来若改名这些内部函数，自动回退原生硬跳（不破坏其他行为）。
 4. **单实例接管**：会话切换会重建插件实例；最新实例接管整页（发布 `__DSH_THINK_UX_LIVE__` 并释放前任的全部观察者/陷阱/追踪器），杜绝多实例互踩。
 
 ## 开关与回滚
